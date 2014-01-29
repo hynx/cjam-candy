@@ -1,0 +1,471 @@
+<html>
+<head>
+	<meta charset="UTF-8" />
+	<title>~ Candy Candy Candy ~</title>
+	<script type="text/javascript" src="js/phaser.min.js"></script>
+    <style type="text/css">
+        body {
+            margin: auto;
+            margin-top: 80px;
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript">
+    var game = new Phaser.Game(500, 800, Phaser.AUTO, '', { preload: preload, create: create, update: update });
+    
+    //Long Story Short:
+    //Tem um bug no Phaser que quando ele checa X antes de Y na hora da colisão as vezes ele cria uma colisão invisível
+    //no chão em certas divisões imaginárias que o Phaser faz pra optimizar os gráficos. A função abaixo troca a ordem
+    //da colisão quando preciso. Se estivermos andando é importante inverter a colisão com X antes, e se pulando inverter
+    //a colisão com Y antes.
+    function trocaCollisionCheck (XorY) {
+        if (XorY.toUpperCase() == 'X') {
+            Phaser.Physics.Arcade.prototype.separate = function (body1, body2) {
+                this._result = (this.separateY(body1, body2) || this.separateX(body1, body2));
+            };
+        }
+        else {
+            Phaser.Physics.Arcade.prototype.separate = function (body1, body2) {
+                this._result = (this.separateX(body1, body2) || this.separateY(body1, body2));
+            };
+        }
+        
+    }
+
+    function scoreCalc(num) {
+        var s = "0000000" + num;
+        scoreText.content =  s.substr(s.length-7);
+    }   
+
+    function comboCalc(num) {
+        var s = "0000" + num;
+        comboText.content =  s.substr(s.length-4);
+    } 
+
+    ///////////////////////////////////////////////////
+    //////////    ~~~   Candy Factory   ~~~    ////////
+    ///////////////////////////////////////////////////
+
+    //-- Todas as functions de Candy vão aqui, a ser mudada pra outro arquivo depois --//
+
+    function candyMachine() {
+        if (game.time.now - currTime > waitTime) {
+            candyPlaceAndType(); //Escolhe um lugar e um doce ou item
+            currTime = game.time.now; //Marca a última vez que caiu um doce
+            updateCandyWait(); //Update no tempo esperado pro próximo doce de acordo com score / combo
+        }
+    }
+
+    function candyPlaceAndType() {
+        //Escolhe um número ímpar de 1 a 7 pra dar espaçamento, multiplica pelo width da imagem, e soma metade do mesmo pra centralizar
+        candyPlace = ((((Math.floor(Math.random()*7)) * 2) + 1) * 32) +16; 
+        candyType = Math.floor((Math.random()*3)+1); //Escolhe um tipo de doce
+
+        switch(candyType)
+        {
+        case 1:
+            candy = items.create(candyPlace, -40, 'candy1');
+            candy.body.gravity.y = 0.2;
+            candy.name = 'candy1';
+            break;
+        case 2:
+            candy = items.create(candyPlace, -40, 'candy2');
+            candy.body.gravity.y = 0.5;
+            candy.name = 'candy2';
+            break;
+        case 3:
+            candy = items.create(candyPlace, -40, 'candy3');
+            candy.body.gravity.y = 1.0;
+            candy.name = 'candy3';
+            break;          
+        }
+
+        candy.body.bounce.y = 0;
+        candy.body.collideWorldBounds = true;
+
+    }
+
+    function updateCandyWait() {
+        waitTime = 3000;
+    }
+
+    function eatCandy(girl, candy) {
+        switch(candy.name)
+        {
+        case 'candy1':
+            score += 100;
+            break;
+        case 'candy2':
+            score += 250;
+            break;
+        case 'candy3':
+            score += 500;
+            break;          
+        }
+        scoreCalc(score);
+        combo += 1;
+        comboCalc(combo);
+        candy.kill();
+    }
+
+    function disapearCandy(candy, structs)
+    {
+        if(structs.name == 'floor' && candy.alive){
+            candy.kill();
+            //Contando o score na tela
+            score -= 0; //Depois a gente vê como a gente vai lidar com a perda de doces
+            scoreCalc(score);
+            combo = 0; //Reseta o combo
+            comboCalc(combo);
+            var disapear = hearts.getFirstAlive();
+            disapear.kill();
+        }
+    }    
+
+    //-- END OF THE CANDY FACTORY --//
+    
+	function preload() {
+		//Centralizando o Jogo
+		this.game.stage.scale.pageAlignHorizontally = true;
+		this.game.stage.scale.pageAlignVertically = true;
+		this.game.stage.scale.refresh();
+        
+        //Carregando Assets//
+        
+        //Main Character
+        game.load.spritesheet('girl', 'assets/character/girl/girlsheet.png', 32, 32);
+        
+        //Background
+        game.load.image('background', 'assets/background/sky.png');
+        
+        //Ground
+        game.load.image('floor', 'assets/struct/floor.png');
+        
+        //Paredes
+        game.load.image('walls', 'assets/struct/walls.png');
+
+        //Status Bar
+        game.load.image('status', 'assets/background/status.png');
+        game.load.image('hfull', 'assets/background/heartfull.png');
+        game.load.image('hempty', 'assets/background/heartempty.png');
+        game.load.image('dfull', 'assets/background/dashfull.png');
+        game.load.image('dempty', 'assets/background/dashempty.png');
+        
+        //Candies
+        game.load.image('candy1', 'assets/candies/candy1.png');
+        game.load.image('candy2', 'assets/candies/candy2.png');
+        game.load.image('candy3', 'assets/candies/candy3.png');
+        
+        //Heart particle
+        game.load.image('heart', 'assets/character/girl/heart.png');
+	}
+    
+    
+    //--Emmiter Function
+    
+    
+    function coracaozinhoGay() {
+
+        //emiterz
+        emitter.x = girl.body.x+12;
+        emitter.y = girl.body.y+12;
+    
+        //  The first parameter sets the effect to "explode" which means all particles are emitted at once
+        //  The second gives each particle a 2000ms lifespan
+        //  The third is ignored when using burst/explode mode
+        //  The final parameter (10) is how many particles will be emitted in this single burst
+        emitter.start(true, 500, null, 3);
+    }
+    
+    //Declaracao das variáveis
+    
+    //girl
+    var girl;
+
+    //HUD
+    var score = 0;
+    var scoreText;
+    var combo = 0;
+    var comboText;
+
+    //Status Bar
+    var hfulltexture;
+    var hemptytexture;
+    var hearts;
+    var heartsback;
+    var dfulltexture;
+    var demptytexture;
+    var dashbar;
+    var dashback;
+    
+    //Structs - um grupo apenas para paredes e chão
+    var structs;
+    
+    //Items
+    var items;
+    var candy;
+    var candyPlace;
+    var candyType;
+    
+    //Dash Vars
+    var dashGauge = 200;
+    var dash;
+    var dashing = false;
+    var lastDash;
+    var lastRecover;
+    
+    //Auxs
+    var numcandies= 10;
+    var cursors;
+    var oldY;
+    var oldPos;
+    var currTime;
+    var waitTime;
+    
+    
+	function create() {
+        
+        //Background
+        game.add.sprite(0, 0, 'background');
+
+        heartsback = game.add.group();
+        for (i=0; i < 5; i++) {
+            hemptytexture = heartsback.create(25 +(i * 38),game.world.height - 92, 'hempty');
+        }
+
+        hearts = game.add.group();
+        for (i=0; i < 5; i++) {
+            hfulltexture = hearts.create(180 -(i * 38),game.world.height - 92, 'hfull');
+        }
+
+        dashback = game.add.group();
+        for (i=0; i < 200; i++) {
+            demptytexture = dashback.create(227 - i,game.world.height - 37, 'dempty');
+        }
+
+        dashbar = game.add.group();
+        for (i=0; i < 200; i++) {
+            dfulltexture = dashbar.create(227 - i,game.world.height - 37, 'dfull');
+        }
+
+        //Status Bar
+        game.add.sprite(9, game.world.height - 113, 'status'); 
+
+        //Ground
+        structs = game.add.group();
+        var floor;
+        for (i=0; i < 30; i++) {
+            floor = structs.create(-22 + (i * 32), game.world.height - 145, 'floor');
+            floor.body.immovable = true; // Tem que setar imovable pra cada tile colocado
+            floor.name = 'floor';
+        }     
+           
+        //Walls
+        var wall;
+        for (i = 0; i < 25; i++) {
+            wall = structs.create(-22, 0 + (i * 32), 'walls');
+            wall.body.immovable = true;
+            wall = structs.create(490, 0 + (i * 32), 'walls');
+            wall.body.immovable = true; // Tem que setar imovable pra cada lado da parede tambem
+        }        
+        
+        //Emitter
+        emitter = game.add.emitter(0, 0, 100);
+        emitter.makeParticles('heart');
+        
+        //Criando a Personagem principal
+        girl = game.add.sprite(32, game.world.height - 300, 'girl');
+        girl.anchor.setTo(0.5, 1);
+        
+        girl.body.bounce.y = 0;
+        girl.body.gravity.y = 6;
+        girl.body.collideWorldBounds = true;
+        oldY = girl.y; //Aux pra checar altura
+        
+        //Animando a filho da puta
+        girl.animations.add('walking', [0, 1, 2, 3], 10, true);
+        girl.animations.add('idle', [4, 5], 2, true);
+        girl.animations.add('dash', [6, 6], 10, true);
+        girl.animations.add('jump', [7, 7], 10, true);
+        girl.animations.add('fall', [8, 8], 10, true);
+
+
+        //  Controles bitch
+        cursors = game.input.keyboard.createCursorKeys();
+        dash = game.input.keyboard.addKey(Phaser.Keyboard.Z);
+        dash.onDown.add(dashNow, this);
+
+        // Criando o Grupo dos doces e items
+        items = game.add.group();
+
+        // Pegando a primeira instância de tempo e setando waitTime pra 0 para o primeiro drop
+        // Setando o primeiro dash pra 0 pra poder dar dash imediatamente
+        currTime = game.time.now; 
+        lastDash = game.time.now; 
+        lastRecover = game.time.now;
+        waitTime = 0;
+
+        
+        ///////
+        //HUD//
+        //////
+        
+        scoreText = game.add.text(366, game.world.height - 50, '0000000', { fontSize: '32px', fill: '#FFFFFF' });
+        comboText = game.add.text(410, game.world.height - 92, '0000', { fontSize: '32px', fill: '#FFFFFF' });
+
+	} 
+
+    function checaMudaAltura () { 
+        if (oldY < girl.y) {      // Tá caindo
+            return 1;
+        }
+        else if (oldY > girl.y) { // Tá subindo
+            return 2;
+        }
+        else if (oldY == girl.y) { // Tá no chão
+            return 3;
+        }    
+    } 
+
+    function dashNow () {
+        oldPos = girl.x;
+        if (game.time.now - lastDash > 500 && dashGauge >= 50) {
+            dashing = true;
+            eatGauge();    
+            lastDash = game.time.now;
+        }
+    }
+
+    function eatGauge() {
+        for (i=0; i < 50; i++) {
+            var disapear = dashbar.getFirstAlive();
+            disapear.kill();
+        }
+        dashGauge -= 50;
+    }
+    
+	function update() {
+
+        //Collision for the girl
+        game.physics.collide(girl, structs);
+        game.physics.overlap(girl, items, eatCandy, null, this);
+
+
+        
+        ///////////////
+        ///Movimento///
+        ///////////////
+
+        var alturaStatus = checaMudaAltura();
+
+        if (alturaStatus == 1) {
+            girl.frame = 8;
+        }
+        else if (alturaStatus == 2) {
+            girl.frame = 7;
+        }
+
+        if (cursors.up.isDown && girl.body.touching.down) {   
+            //Pulando
+            girl.body.velocity.y = -300;
+        }
+
+        //  Reset no movimento da menininha
+        girl.body.velocity.x = 0;
+
+        if (cursors.left.isDown) {
+            //  Vai pra esquerda
+            girl.scale.x = 1;
+            girl.body.velocity.x = -200;
+            if (alturaStatus == 3 && girl.body.touching.down) {
+                girl.animations.play('walking');
+            }
+        }
+        else if (cursors.right.isDown) {   
+            //  Vai pra direita
+            girl.scale.x = -1;
+            girl.body.velocity.x = 200;
+            if (alturaStatus == 3 && girl.body.touching.down) {
+                girl.animations.play('walking');
+            }
+        }
+        else {   
+            // Parada
+            if (alturaStatus == 3 && girl.body.touching.down) {
+                girl.animations.play('idle');
+            }
+        }
+
+        
+
+        // Dashing Mechanics
+        if (girl.body.touching.left || girl.body.touching.right) {
+            dashing = false ;
+        }
+
+        switch(girl.scale.x)
+        {
+        case 1:
+            if ( dashing && (oldPos - girl.x < 150)) {  // Tamanho do Dash
+                girl.body.velocity.x = -400;  // Velocidade do Dash
+                if (girl.animations.currentFrame != 7 && girl.animations.currentFrame != 8) {
+                    girl.animations.play('dash');
+                }
+                coracaozinhoGay();
+            }
+            else {
+                dashing = false;
+            }
+            break;
+        case -1:
+            if ( dashing && (oldPos - girl.x > -150)) {  // Tamanho do Dash
+                girl.body.velocity.x = 400;  // Velocidade do Dash
+                if (girl.animations.currentFrame != 7 && girl.animations.currentFrame != 8) {
+                    girl.animations.play('dash');
+                }
+                coracaozinhoGay();
+            }    
+            else {
+                dashing = false;
+            }
+            break; 
+        }
+
+        //Recupera a Dash Gauge overtime
+        if (dashGauge < 200) {
+            if (game.time.now - lastRecover > 200) {
+                var appearing = dashbar.getAt(200-dashGauge); //200 é o numero de sprites que tem a gauge, aqui a gente pega pelo index
+                appearing.revive();
+                dashGauge += 1;
+                lastRecover = game.time.now;
+            }
+        }
+
+        //Segura a gambiarra! Usando a função pra trocar a ordem de checagem de colisão devido à um bug no Phaser
+        //Qualquer input fora X coloca a checagem na ordem original, mas coloquei como Y pra facilitar a leitura.
+        if (!girl.body.touching.down) {
+            trocaCollisionCheck('Y');
+        }
+        else {
+            trocaCollisionCheck('X');
+        }
+
+        oldY = girl.y; //Pega a posição atual e coloca como old pro próximo ciclo
+
+        //Candy Mechanics
+        candyMachine();
+        game.physics.overlap(items, structs, disapearCandy, null, this);
+        
+        //Emitter fading paranue
+        emitter.forEachAlive(function(p){
+            p.alpha= p.lifespan / emitter.lifespan;
+        });
+            
+    }
+
+</script>
+
+</body>
+</html>
